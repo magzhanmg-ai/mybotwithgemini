@@ -37,7 +37,7 @@ async def parse_message_with_ai(text):
     try:
         # Исправленный путь к модели для новой библиотеки
         response = client_gemini.models.generate_content(
-            model="gemini-1.5-flash", 
+            model="gemini-1.5-flash-002", 
             contents=text,
             config={"system_instruction": sys_instr}
         )
