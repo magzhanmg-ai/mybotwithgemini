@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Ключи
 BOT_TOKEN = "8643907201:AAFsUqu288MfVlDwk_WoS2TP60wwzCmD5ug"
-GEMINI_KEY = "AIzaSyC9wh_8AJyWVfztPQ_m1VhzoUBT0BgPPGU"
+GEMINI_KEY = "AQ.Ab8RN6K1jhmE-m5aXQhwKAiFkg9GVIXP9mj99t2PQ09vFoZBdQ"
 SHEET_NAME = "Финансы"
 
 # Настройка Gemini (старый, проверенный способ)
