@@ -2,69 +2,77 @@ import os
 import asyncio
 import gspread
 import logging
+import google.generativeai as genai
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Логирование
+# Настройка логов
 logging.basicConfig(level=logging.INFO)
 
-# Конфигурация из переменных окружения
-API_TOKEN = "8643907201:AAFsUqu288MfVlDwk_WoS2TP60wwzCmD5ug"
-# Название твоей гугл-таблицы
-SHEET_NAME = os.getenv('SHEET_NAME', 'Финансы') 
+# Ключи и настройки
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+GEMINI_KEY = os.getenv('GEMINI_API_KEY')
+SHEET_NAME = os.getenv('SHEET_NAME', 'Финансы')
 
-bot = Bot(token=API_TOKEN)
+# Настройка Gemini
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# --- РАБОТА С GOOGLE TABLES ---
-def get_sheet():
+# --- ФУНКЦИЯ ИИ ---
+async def parse_message_with_ai(text):
+    prompt = f"""
+    Проанализируй текст расхода/дохода: "{text}"
+    Верни ответ строго в формате: сумма,категория,тип
+    Тип может быть только: доход или расход.
+    Сумма — только число.
+    Категория — одно слово с большой буквы.
+    Если в тексте нет суммы, верни: error
+    Пример: кофе 500 -> 500,Еда,расход
+    """
+    response = model.generate_content(prompt)
+    result = response.text.strip()
+    return result
+
+# --- РАБОТА С ТАБЛИЦЕЙ ---
+def add_to_sheet(data_string, user_name):
+    # Разделяем ответ от ИИ
+    amount, category, t_type = data_string.split(',')
+    
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    # Файл service_account.json должен быть в папке проекта
     creds = ServiceAccountCredentials.from_json_keyfile_name('service_account.json', scope)
     client = gspread.authorize(creds)
-    return client.open(SHEET_NAME).sheet1
-
-def add_to_sheet(user_id, user_name, amount, category, t_type):
-    sheet = get_sheet()
-    date_now = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
-    # Добавляем строку в таблицу: Дата, ID, Имя, Тип, Категория, Сумма
-    sheet.append_row([date_now, user_id, user_name, t_type, category, amount])
+    sheet = client.open(SHEET_NAME).sheet1
+    
+    date_now = datetime.now().strftime('%d.%m.%Y')
+    sheet.append_row([date_now, user_name, t_type, category, amount])
 
 # --- ОБРАБОТЧИКИ ---
-
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
-    await message.answer(f"Привет, {message.from_user.first_name}! Теперь я пишу всё в Google Таблицу 📊")
+    await message.answer("Привет! Я твой финансовый ИИ-помощник. Пиши что угодно, например: 'купил продукты на 5000' или 'зарплата 400к'")
 
 @dp.message()
-async def process_finance(message: types.Message):
-    text = message.text.lower().strip()
-    parts = text.split()
+async def handle_message(message: types.Message):
+    ai_data = await parse_message_with_ai(message.text)
     
-    amount = None
-    for part in parts:
-        try:
-            amount = float(part.replace(',', '.'))
-            parts.remove(part)
-            break
-        except ValueError:
-            continue
-
-    if amount is None: return
-
-    category = " ".join(parts) if parts else "разное"
-    t_type = "доход" if any(word in category for word in ["зарплат", "доход", "пришло"]) else "расход"
+    if ai_data == "error":
+        await message.answer("Не смог понять сумму. Попробуй написать понятнее.")
+        return
 
     try:
-        # Записываем в облако
-        add_to_sheet(message.from_user.id, message.from_user.full_name, amount, category, t_type)
+        add_to_sheet(ai_data, message.from_user.first_name)
+        # Красивый ответ пользователю
+        amount, category, t_type = ai_data.split(',')
         icon = "💰" if t_type == "доход" else "✅"
-        await message.answer(f"{icon} В таблицу добавлено: {amount:,.0f} ₸ ({category})")
+        await message.answer(f"{icon} Записано в таблицу!\nСумма: {amount} ₸\nКатегория: {category}")
     except Exception as e:
-        logging.error(f"Ошибка Google: {e}")
-        await message.answer("Ошибка при записи в таблицу. Проверь настройки доступа.")
+        logging.error(f"Ошибка: {e}")
+        await message.answer("Ошибка доступа к таблице. Проверь Drive API и доступ для почты бота.")
 
 async def main():
     await dp.start_polling(bot)
