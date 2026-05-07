@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Ключи и настройки
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-GEMINI_KEY = os.getenv('GEMINI_API_KEY')
+GEMINI_KEY = "AIzaSyC9wh_8AJyWVfztPQ_m1VhzoUBT0BgPPGU"
 SHEET_NAME = os.getenv('SHEET_NAME', 'Финансы')
 
 # Инициализация нового клиента Gemini
