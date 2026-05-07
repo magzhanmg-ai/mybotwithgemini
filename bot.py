@@ -33,9 +33,9 @@ async def parse_message_with_ai(text):
     Если суммы нет, верни: error
     """
     try:
-        # Используем модель gemini-2.0-flash (она самая новая и стабильная)
+        # Используем модель gemini-1.5.0-flash (она самая новая и стабильная)
         response = client_gemini.models.generate_content(
-            model="gemini-2.0-flash", 
+            model="gemini-1.5.0-flash", 
             contents=prompt
         )
         return response.text.strip()
