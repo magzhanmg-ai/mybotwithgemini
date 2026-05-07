@@ -30,18 +30,25 @@ async def parse_message_with_ai(text):
     Верни ТОЛЬКО в формате: сумма,категория,тип
     Тип: доход или расход. Сумма: число. Категория: одно слово.
     Если нет суммы, верни: error
-    Пример: кофе 500 -> 500,Еда,расход
     """
-    try:
-        # В этой библиотеке вызов идет проще
-        response = model.generate_content(prompt)
-        res = response.text.strip().lower()
-        if res.count(',') != 2:
-            return "error"
-        return res
-    except Exception as e:
-        logging.error(f"AI Error: {e}")
-        return "error"
+    
+    # Список моделей для проверки (иногда нужно с models/, иногда без)
+    models_to_try = ['gemini-1.5-flash', 'models/gemini-1.5-flash']
+    
+    for model_name in models_to_try:
+        try:
+            current_model = genai.GenerativeModel(model_name)
+            response = current_model.generate_content(prompt)
+            res = response.text.strip().lower()
+            
+            if res.count(',') == 2:
+                logging.info(f"ИИ сработал с моделью: {model_name}")
+                return res
+        except Exception as e:
+            logging.error(f"Ошибка с моделью {model_name}: {e}")
+            continue # Пробуем следующую модель из списка
+            
+    return "error"
 
 def add_to_sheet(ai_result, user_name):
     amount, category, t_type = ai_result.split(',')
