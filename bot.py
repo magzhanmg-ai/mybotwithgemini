@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 logging.basicConfig(level=logging.INFO)
 
 # Конфигурация из переменных окружения
-API_TOKEN = os.getenv('BOT_TOKEN')
+API_TOKEN = "8643907201:AAFsUqu288MfVlDwk_WoS2TP60wwzCmD5ug"
 # Название твоей гугл-таблицы
 SHEET_NAME = os.getenv('SHEET_NAME', 'Финансы') 
 
