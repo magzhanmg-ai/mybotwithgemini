@@ -2,51 +2,55 @@ import os
 import asyncio
 import gspread
 import logging
-import google.generativeai as genai
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from oauth2client.service_account import ServiceAccountCredentials
+from google import genai  # Новая библиотека
 
 # Настройка логов
 logging.basicConfig(level=logging.INFO)
 
 # Ключи и настройки
-BOT_TOKEN = "8643907201:AAFsUqu288MfVlDwk_WoS2TP60wwzCmD5ug"
-GEMINI_KEY = "AIzaSyC9wh_8AJyWVfztPQ_m1VhzoUBT0BgPPGU"
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+GEMINI_KEY = os.getenv('GEMINI_API_KEY')
 SHEET_NAME = os.getenv('SHEET_NAME', 'Финансы')
 
-# Настройка Gemini
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Инициализация нового клиента Gemini
+client_gemini = genai.Client(api_key=GEMINI_KEY)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# --- ФУНКЦИЯ ИИ ---
+# --- ФУНКЦИЯ ИИ (Обновленная) ---
 async def parse_message_with_ai(text):
     prompt = f"""
-    Проанализируй текст расхода/дохода: "{text}"
+    Проанализируй текст: "{text}"
     Верни ответ строго в формате: сумма,категория,тип
-    Тип может быть только: доход или расход.
-    Сумма — только число.
-    Категория — одно слово с большой буквы.
-    Если в тексте нет суммы, верни: error
-    Пример: кофе 500 -> 500,Еда,расход
+    Тип: доход или расход.
+    Сумма: только число.
+    Категория: одно слово (например: Еда, Транспорт, Зарплата).
+    Если суммы нет, верни: error
     """
-    response = model.generate_content(prompt)
-    result = response.text.strip()
-    return result
+    try:
+        # Используем модель gemini-2.0-flash (она самая новая и стабильная)
+        response = client_gemini.models.generate_content(
+            model="gemini-2.0-flash", 
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        logging.error(f"Ошибка Gemini: {e}")
+        return "error"
 
 # --- РАБОТА С ТАБЛИЦЕЙ ---
 def add_to_sheet(data_string, user_name):
-    # Разделяем ответ от ИИ
     amount, category, t_type = data_string.split(',')
     
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name('service_account.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME).sheet1
+    gc = gspread.authorize(creds)
+    sheet = gc.open(SHEET_NAME).sheet1
     
     date_now = datetime.now().strftime('%d.%m.%Y')
     sheet.append_row([date_now, user_name, t_type, category, amount])
@@ -54,25 +58,24 @@ def add_to_sheet(data_string, user_name):
 # --- ОБРАБОТЧИКИ ---
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
-    await message.answer("Привет! Я твой финансовый ИИ-помощник. Пиши что угодно, например: 'купил продукты на 5000' или 'зарплата 400к'")
+    await message.answer("ИИ-помощник готов! Пиши расходы, например: 'такси 1200' или 'обед 3500'.")
 
 @dp.message()
 async def handle_message(message: types.Message):
-    ai_data = await parse_message_with_ai(message.text)
+    result = await parse_message_with_ai(message.text)
     
-    if ai_data == "error":
-        await message.answer("Не смог понять сумму. Попробуй написать понятнее.")
+    if "error" in result or "," not in result:
+        await message.answer("Не удалось распознать сумму. Попробуй написать проще.")
         return
 
     try:
-        add_to_sheet(ai_data, message.from_user.first_name)
-        # Красивый ответ пользователю
-        amount, category, t_type = ai_data.split(',')
-        icon = "💰" if t_type == "доход" else "✅"
-        await message.answer(f"{icon} Записано в таблицу!\nСумма: {amount} ₸\nКатегория: {category}")
+        add_to_sheet(result, message.from_user.first_name)
+        amount, category, t_type = result.split(',')
+        icon = "💰" if "доход" in t_type else "✅"
+        await message.answer(f"{icon} Записано!\n💰 Сумма: {amount} ₸\n📂 Категория: {category}")
     except Exception as e:
-        logging.error(f"Ошибка: {e}")
-        await message.answer("Ошибка доступа к таблице. Проверь Drive API и доступ для почты бота.")
+        logging.error(f"Ошибка записи: {e}")
+        await message.answer("Бот работает, но не может достучаться до таблицы. Проверь доступ для email бота!")
 
 async def main():
     await dp.start_polling(bot)
